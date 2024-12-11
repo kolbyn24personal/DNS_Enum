@@ -19,18 +19,26 @@ mkdir -p "$GOPATH/bin"
 # Ensure $GOPATH/bin is in PATH for this script
 export PATH="$GOPATH/bin:$PATH"
 
-echo "[+] Installing waybackurls..."
-go install github.com/tomnomnom/waybackurls@latest
-
-echo "[+] Installing zdns..."
-go install github.com/zmap/zdns@latest
-
-# Move waybackurls and zdns to /usr/local/bin for global access if they exist
-if [ -f "$GOPATH/bin/waybackurls" ]; then
-    sudo mv "$GOPATH/bin/waybackurls" /usr/local/bin/
+# Install waybackurls if not already in PATH
+if [[ -z $(which waybackurls) ]]; then
+    echo "[+] Installing waybackurls..."
+    go install github.com/tomnomnom/waybackurls@latest
+    if [ -f "$GOPATH/bin/waybackurls" ]; then
+        sudo ln -s "$GOPATH/bin/waybackurls" /usr/local/bin/
+    fi
+else
+    echo "[+] waybackurls already installed. Skipping..."
 fi
-if [ -f "$GOPATH/bin/zdns" ]; then
-    sudo mv "$GOPATH/bin/zdns" /usr/local/bin/
+
+# Install zdns if not already in PATH
+if [[ -z $(which zdns) ]]; then
+    echo "[+] Installing zdns..."
+    go install github.com/zmap/zdns@latest
+    if [ -f "$GOPATH/bin/zdns" ]; then
+        sudo ln -s "$GOPATH/bin/zdns" /usr/local/bin/
+    fi
+else
+    echo "[+] zdns already installed. Skipping..."
 fi
 
 # Attempt to symlink cert.sh and brute_subs.sh if they exist in the same directory as this script
