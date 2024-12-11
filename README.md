@@ -34,9 +34,9 @@ After enumeration, the tool can optionally open discovered subdomains in Firefox
 - golang for installing waybackurls and zdns
 
 ### Steps
-
+(The install dependencies script should cover all of this)
 1. Clone this repository:
-   **git clone https://github.com/<your-username>/<your-repo>.git**
+   **git clone https://github.com/kolbyn24personal/DNS_Enum**
    
    **cd <your-repo>**
 
@@ -77,9 +77,12 @@ Optional flags:
 - **--resolvers to specify a custom resolvers file**
 
 Example:
-**./dns_enum.py --domain example.com --no-wayback**
-**./dns_enum.py --domain example.com --no-wayback --wordlist ~/my_wordlist.txt --resolvers ~/my_resolvers.txt**
-
+```
+./dns_enum.py --domain example.com --no-wayback
+```
+```
+./dns_enum.py --domain example.com --no-wayback --wordlist ~/my_wordlist.txt --resolvers ~/my_resolvers.txt
+```
 ## Workflow
 
 1. **Subdomain Discovery:**
