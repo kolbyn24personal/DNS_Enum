@@ -119,10 +119,18 @@ Next Steps:
 - Use EyeWitness for quick overviews and screenshots
 - Investigate endpoints, directories, or services for vulnerabilities
 
-## Workflow
+## Credit
 This script was inspired by my notes file located here:
 https://github.com/kolbyn24/Notes/blob/main/03%20-%20Content/DNS%20Enumeration.md
-which was built using Patrick Higgins’ methodology and scripts.
+which was built using **Patrick Higgins** methodology and scripts.
+
+What Changed between this note file and the final all in one script:
+
+- The cert.sh logic is replaced by get_cert_subdomains() which uses Python’s requests and json to query crt.sh.
+- The brute_subs.sh logic is handled by brute_force_subdomains() which uses massdns to brute force from a given wordlist.
+- The bulk_resolve_dns.sh logic is essentially massdns_resolve() function, allowing us to resolve any list of domains using massdns.
+- The script still uses amass, waybackurls, and massdns as installed tools, which can be installed via apt or go. No custom shell scripts are needed now.
+- Probably other things, idk at this point
 
 The notes file details a more manual and step-by-step approach, giving you full insight into how each step is performed and why. 
 
