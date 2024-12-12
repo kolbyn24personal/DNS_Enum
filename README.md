@@ -40,8 +40,9 @@ After enumeration, the tool can optionally open discovered subdomains in Firefox
    
    **cd <your-repo>**
 
-2. Run the installation script:
-   **./install_deps.sh**
+2. Run the installation script(must run as sudo):
+   **chmod +x ./install_deps.sh**
+   **sudo ./install_deps.sh**
    This will:
    - Install required packages and tools
    - Install waybackurls and zdns via go
@@ -101,7 +102,7 @@ Example:
    If not skipped, **zdns** verifies which subdomains resolve.
 
 5. **Final Prompt:**
-   After enumeration:
+   After enumeration (WARNING: This goes from OISNT to active scanning after this step, do nothing if you are only performing OSINT):
    Found X subdomains for example.com.
    (F) Firefox | (E) Eyewitness | (N) Nothing
    
@@ -147,6 +148,9 @@ Use this tool only on domains you own or have permission to test. Unauthorized u
 
 Contributions are welcome via issues or pull requests.
 
-## License
+## Issues/Imporvements actively being worked on
 
-This project is licensed under the MIT License. See the **LICENSE** file for details.
+- The script is currently not handling wildcard entries. This is being worked on and will be updated soon.
+- Need to add a check in the install script to run as sudo
+- Need to add an option to specify an output directory and a check to see if its overwritting previous files
+
