@@ -5,13 +5,9 @@ import sys
 import subprocess
 import requests
 import json
-import tempfile
 from urllib.parse import urlparse
 
 def run_command(cmd, exit_on_fail=False):
-    """Run a shell command and return stdout. Print errors if any.
-    If exit_on_fail=True and command fails, exit the script.
-    Otherwise, just print a warning and continue."""
     result = subprocess.run(cmd, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         print(f"[!] Command failed: {cmd}\n{result.stderr}", file=sys.stderr)
@@ -20,10 +16,6 @@ def run_command(cmd, exit_on_fail=False):
     return result.stdout.strip()
 
 def get_cert_subdomains(domain):
-    """
-    Fetch subdomains from crt.sh for the given domain using requests.
-    Try one User-Agent, if fail, try another one.
-    """
     url = f"https://crt.sh/?q={domain}&output=json"
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -40,84 +32,29 @@ def get_cert_subdomains(domain):
                 for line in name_value.split('\n'):
                     line = line.strip()
                     if line.startswith('*.'):
-                        line = line[2:]  # remove '*.'
+                        line = line[2:]
                     if line and '.' in line:
                         subdomains.add(line)
             return sorted(subdomains)
         except Exception as e:
             print(f"[!] Error fetching crt.sh data with UA={ua}: {e}", file=sys.stderr)
-            # try next user agent
     return []
 
-def massdns_resolve(domains, resolvers, record_type="A"):
-    """
-    Uses massdns to resolve a list of domains for A or CNAME records.
-    record_type: "A" or "CNAME"
-    """
-    if not domains:
-        return []
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as domain_file:
-        domain_file_path = domain_file.name
-        for d in domains:
-            domain_file.write(d + "\n")
-    massdns_output = tempfile.NamedTemporaryFile(mode='r', delete=False)
-    massdns_output_path = massdns_output.name
-    massdns_output.close()
-
-    cmd = f"massdns -r {resolvers} -t {record_type} -o S -w {massdns_output_path} {domain_file_path}"
-    run_command(cmd)
-    
-    results = set()
-    if os.path.exists(massdns_output_path):
-        with open(massdns_output_path, 'r') as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) > 0:
-                    host = parts[0].rstrip('.')
-                    if '.' in host:
-                        if record_type == "A":
-                            results.add(host)
-                        elif record_type == "CNAME":
-                            # Format: host CNAME target
-                            if len(parts) >= 3 and parts[1] == "CNAME":
-                                target = parts[2].rstrip('.')
-                                results.add(f"{host},{target}")
-    os.remove(domain_file_path)
-    os.remove(massdns_output_path)
-    return sorted(results)
-
-def brute_force_subdomains(domain, wordlist, resolvers):
-    """
-    Brute force subdomains by appending them from a wordlist and resolving with massdns.
-    """
-    if not os.path.exists(wordlist):
-        print(f"[!] Wordlist not found at {wordlist}", file=sys.stderr)
-        return []
-    to_resolve = []
-    with open(wordlist, 'r') as wl:
-        for line in wl:
-            sub = line.strip()
-            if sub:
-                to_resolve.append(f"{sub}.{domain}")
-    return massdns_resolve(to_resolve, resolvers=resolvers, record_type="A")
-
 def main():
-    parser = argparse.ArgumentParser(description="DNS Enumeration Tool (Integrated scripts)")
-    parser.add_argument('--domain', '-d', help="Domain to enumerate", required=True)
-    parser.add_argument('--wordlist', help="Custom wordlist for brute forcing", default="/usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-5000.txt")
-    parser.add_argument('--resolvers', help="Path to resolvers file for massdns", default="/usr/share/seclists/Miscellaneous/dns-resolvers.txt")
+    parser = argparse.ArgumentParser(description="DNS Enumeration Tool with shuffledns (handles wildcards)")
+    parser.add_argument('--domain', '-d', required=True, help="Domain to enumerate")
+    parser.add_argument('--wordlist', default="/usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-5000.txt", help="Custom wordlist for brute forcing")
+    parser.add_argument('--resolvers', default="/usr/share/seclists/Miscellaneous/dns-resolvers.txt", help="Path to resolvers file for shuffledns")
 
-    # Flags to skip certain tools
     parser.add_argument('--no-certsh', action='store_true', help="Skip cert.sh logic")
     parser.add_argument('--no-wayback', action='store_true', help="Skip waybackurls")
     parser.add_argument('--no-amass', action='store_true', help="Skip amass")
     parser.add_argument('--no-bruteforce', action='store_true', help="Skip brute forcing subdomains")
-    parser.add_argument('--no-zdns', action='store_true', help="Skip final A record resolution check")
+    parser.add_argument('--no-zdns', action='store_true', help="Skip final shuffledns resolution check")
 
     args = parser.parse_args()
     domain = args.domain
 
-    # Create output directory
     output_dir = f"{domain}_output"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -128,8 +65,8 @@ def main():
     amass_file = os.path.join(output_dir, f"{domain}_amass.txt")
     brute_file = os.path.join(output_dir, f"{domain}_bruteforce.txt")
     all_file = os.path.join(output_dir, f"{domain}_all.txt")
-    wildcards_file = os.path.join(output_dir, f"{domain}_wildcards.txt")
     cname_file = os.path.join(output_dir, f"{domain}_cnames.txt")
+    final_resolved_file = os.path.join(output_dir, f"{domain}_final_resolved.txt")
 
     subdomains = set()
 
@@ -153,7 +90,6 @@ def main():
             with open(wayback_urls_file, 'w') as f:
                 f.write(output + "\n")
 
-            # Extract subdomains from wayback URLs
             wb_subs = set()
             for line in output.splitlines():
                 try:
@@ -162,7 +98,6 @@ def main():
                     if host and '.' in host:
                         wb_subs.add(host)
                 except ValueError:
-                    # Invalid URL (e.g. Invalid IPv6 URL), skip
                     continue
             if wb_subs:
                 wb_subs = sorted(wb_subs)
@@ -183,14 +118,21 @@ def main():
                     if line and '.' in line:
                         subdomains.add(line)
 
-    # brute force subdomains
+    # brute forcing with shuffledns if not skipped
     if not args.no_bruteforce:
-        print("[+] Brute forcing subdomains...")
-        brute_subs = brute_force_subdomains(domain, args.wordlist, args.resolvers)
-        if brute_subs:
-            with open(brute_file, 'w') as f:
-                f.write("\n".join(brute_subs) + "\n")
-            subdomains.update(brute_subs)
+        print("[+] Brute forcing subdomains with shuffledns (domain+wordlist mode)...")
+        if not os.path.exists(args.wordlist):
+            print(f"[!] Wordlist not found at {args.wordlist}. Skipping brute force.", file=sys.stderr)
+        else:
+            # Use -mode bruteforce
+            brute_cmd = f"shuffledns -d {domain} -w {args.wordlist} -r {args.resolvers} -o {brute_file} -mode bruteforce"
+            run_command(brute_cmd)
+            if os.path.exists(brute_file) and os.path.getsize(brute_file) > 0:
+                with open(brute_file, 'r') as bf:
+                    for line in bf:
+                        line=line.strip()
+                        if line and '.' in line:
+                            subdomains.add(line)
 
     # Combine and deduplicate all found subdomains
     all_subs = sorted(subdomains)
@@ -202,53 +144,34 @@ def main():
         print("[!] No subdomains found.")
         open(all_file, 'w').close()
 
-    # Final resolution check if not skipped (ensure subdomains resolve)
+    # Final resolution check with shuffledns in list mode if not skipped
     if not args.no_zdns and all_subs:
-        print("[+] Final resolution check with massdns A record...")
-        final_resolved = massdns_resolve(all_subs, args.resolvers, record_type="A")
-        if final_resolved:
-            all_subs = sorted(set(final_resolved))
-            with open(all_file, 'w') as f:
-                f.write("\n".join(all_subs) + "\n")
+        print("[+] Final resolution check with shuffledns (list mode, handles wildcards)...")
+        # Use -mode resolver here
+        shuffledns_cmd = f"shuffledns -list {all_file} -r {args.resolvers} -o {final_resolved_file} -mode resolve"
+        run_command(shuffledns_cmd)
+        if os.path.exists(final_resolved_file) and os.path.getsize(final_resolved_file) > 0:
+            with open(final_resolved_file, 'r') as f:
+                all_subs = [l.strip() for l in f if l.strip()]
         else:
-            # If none resolved
-            with open(all_file, 'w') as f:
-                pass
             all_subs = []
-
-    # Check CNAME records for final subs
-    if all_subs:
-        print("[+] Checking CNAME records for final subdomains...")
-        cname_results = massdns_resolve(all_subs, args.resolvers, record_type="CNAME")
-        if cname_results:
-            # cname_results are lines like "host,target"
-            with open(cname_file, 'w') as f:
-                for line in cname_results:
-                    f.write(line + "\n")
-
-    # Separate wildcards
-    final_list = []
-    if os.path.exists(all_file) and os.path.getsize(all_file) > 0:
-        with open(all_file, 'r') as f:
-            final_list = [l.strip() for l in f if l.strip() != ""]
-        wildcards = [x for x in final_list if '*' in x]
-        clean = [x for x in final_list if '*' not in x]
-
-        # Deduplicate clean
-        clean = sorted(set(clean))
-
-        with open(all_file, 'w') as f:
-            if clean:
-                f.write("\n".join(clean) + "\n")
-
-        if wildcards:
-            with open(wildcards_file, 'w') as f:
-                f.write("\n".join(sorted(set(wildcards))) + "\n")
-
-        final_list = clean
     else:
-        final_list = []
+        # If no final resolution step, we trust all_subs as is
+        pass
 
+    # Get CNAME information with dnsx if we have final resolved subs
+    if all_subs:
+        print("[+] Checking CNAME records with dnsx...")
+        with open(final_resolved_file, 'w') as f:
+            f.write("\n".join(all_subs) + "\n")
+
+        dnsx_cmd = f"dnsx -cname -l {final_resolved_file} -silent"
+        cname_output = run_command(dnsx_cmd)
+        if cname_output:
+            with open(cname_file, 'w') as cf:
+                cf.write(cname_output + "\n")
+
+    final_list = all_subs
     count = len(final_list)
     print(f"Found {count} resolved subdomains for {domain}.")
 
@@ -277,9 +200,7 @@ def main():
         else:
             print("No action taken.")
 
-    # Print a helpful one-liner at the end:
-    print("\n[+] To attempt to resolve full URLs (like those from waybackurls) using zdns, you could do something like:")
-    print("cat path/to/full_urls.txt | sed 's|^http://||; s|^https://||; s|/.*||' | sort -u | zdns A -threads 10 | jq -r '.data.answers[].answer' > resolved_ips.txt")
+
 
 if __name__ == "__main__":
     main()

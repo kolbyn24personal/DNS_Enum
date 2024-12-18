@@ -13,27 +13,38 @@ After enumeration, the tool can optionally open discovered subdomains in Firefox
 ## Features
 
 - Integrates multiple subdomain discovery methods:
-  - **cert.sh** (queries crt.sh for SSL-based subdomains)
-  - **waybackurls** (retrieves historical subdomains from the Wayback Machine)
-  - **amass** (comprehensive subdomain enumeration)
-  - **brute_subs.sh** (brute forcing subdomains)
-  - **zdns** (bulk DNS resolution checks)
-- Deduplicates subdomains at multiple steps
-- Filters out non-resolving subdomains and wildcard entries
-- Allows skipping certain enumeration steps using --no-* flags
-- Offers a final prompt to open subdomains in Firefox, run EyeWitness, or do nothing
+  - Queries `crt.sh` (via the script's internal logic) for certificate-based subdomain enumeration.
+  - Uses `waybackurls` to extract potential subdomains from archived URLs.
+  - Uses `amass` in passive mode to find subdomains.
+  - Uses `shuffledns` in brute force mode (if desired) to discover additional subdomains from a wordlist.
+- Performs a final resolution check with `shuffledns` in resolver mode, filtering out wildcard DNS entries automatically.
+- Uses `dnsx` to find and list CNAME records of the final resolved subdomains.
+- Offers a final prompt to open discovered subdomains in Firefox, run Eyewitness to capture screenshots and HTTP headers, or do nothing.
 - Stores outputs in a domain-specific output directory
 
 ## Installation
 
 ### Prerequisites
 
-- Kali Linux (recommended) or similar Linux environment with sudo privileges
-- Tools such as amass, jq, firefox-esr, git, python3-venv, golang, seclists, massdns, eyewitness
-- A valid DNS resolvers file (e.g., /usr/share/seclists/Miscellaneous/dns-resolvers.txt)
-- golang for installing waybackurls and zdns
+- Kali Linux (recommended) or a similar Debian-based environment with `sudo` privileges.
+- `golang` installed for `go install` tools.
+- `python3` (usually pre-installed on Kali).
 
-### Steps
+### Tools Installed by the `install_deps.sh` Script
+
+- **amass**: Subdomain enumeration tool.
+- **jq**: For JSON parsing (used in various pipelines).
+- **firefox-esr**: For opening found subdomains in browser tabs.
+- **git**: For cloning and general version control operations.
+- **python3-venv**: Python virtual environment support.
+- **golang**: For installing Go-based tools.
+- **eyewitness**: For automated reconnaissance (screenshots, HTTP info).
+- **waybackurls**: For extracting URLs and subdomains from the Wayback Machine.
+- **zdns**: For bulk DNS resolution if needed (optional).
+- **shuffledns**: Handles DNS brute forcing and resolving final lists, filtering wildcards.
+- **dnsx**: For extracting CNAME records and additional DNS data.
+
+### Steps To Install
 (The install dependencies script should cover all of this)
 1. Clone this repository:
    **git clone https://github.com/kolbyn24personal/DNS_Enum**
@@ -43,22 +54,17 @@ After enumeration, the tool can optionally open discovered subdomains in Firefox
 2. Run the installation script(must run as sudo):
    **chmod +x ./install_deps.sh**
    **sudo ./install_deps.sh**
-   This will:
-   - Install required packages and tools
-   - Install waybackurls and zdns via go
-   - Symlink any external scripts if present (not required now)
+
 
 3. Verify the installation:
-   **which waybackurls**
-   
-   **which zdns**
-   
-   **which eyewitness**
-   
-   **which cert.sh**
-   
-   **which brute_subs.sh**
-   
+```
+which amass
+which waybackurls
+which shuffledns
+which dnsx
+which eyewitness
+which firefox
+```   
    If these commands return paths (e.g., **/usr/local/bin/waybackurls**), the setup is complete.
 
 ## Usage
@@ -67,17 +73,22 @@ Run the tool with a target domain:
 **./dns_enum.py --domain example.com**
 
 Optional flags:
-- **--no-certsh**
-- **--no-wayback**
-- **--no-amass**
-- **--no-bruteforce**
-- **--no-zdns**
+- **--no-certsh**: Skip querying crt.sh
+- **--no-wayback**: Skip waybackurls step
+- **--no-amass**: Skip amass enumeration
+- **--no-bruteforce**: Skip brute forcing subdomains with shuffledns
+- **--no-zdns**: Skip final shuffledns resolution check (not recommended)
 
 Optional flags:
 - **--wordlist to specify a custom wordlist**
 - **--resolvers to specify a custom resolvers file**
 
 Example:
+```
+./dns_enum.py --domain example.com --wordlist /path/to/wordlist.txt --resolvers /path/to/resolvers.txt
+
+
+```
 ```
 ./dns_enum.py --domain example.com --no-wayback
 ```
@@ -86,22 +97,22 @@ Example:
 ```
 ## Workflow
 
-1. **Subdomain Discovery:**
-   - **cert.sh**: Finds subdomains via crt.sh
-   - **waybackurls**: Historical subdomains from archive data
-   - **amass**: Large-scale subdomain enumeration
-   - **brute_subs.sh**: Brute forces potential subdomains
+1. **Data Gathering:**  
+   - Queries `crt.sh` to find certificate-based subdomains.
+   - Uses `waybackurls` to find historical subdomains.
+   - Uses `amass` in passive mode to find subdomains.
+   - Optionally uses `shuffledns` in brute force mode against a chosen wordlist to uncover more subdomains.
 
-2. **Combining Results:**
-   Results are combined, deduplicated, and saved to **example.com_all.txt**
+2. **Combining Results:**  
+   Merges all discovered subdomains into one list and removes duplicates.
 
-3. **Filtering Wildcards:**
-   Entries containing `*` move to **example.com_wildcards.txt**
+3. **Final Resolution:**  
+   Runs `shuffledns` in resolver mode to confirm which subdomains resolve properly, automatically filtering out wildcard DNS entries.
 
-4. **zdns Resolution Check:**
-   If not skipped, **zdns** verifies which subdomains resolve.
+4. **CNAME Enumeration:**  
+   Uses `dnsx` to find CNAME records for the resolved subdomains and saves them to a file.
 
-5. **Final Prompt:**
+5. **Final Prompt:**  
    After enumeration (WARNING: This goes from OISNT to active scanning after this step, do nothing if you are only performing OSINT):
    Found X subdomains for example.com.
    (F) Firefox | (E) Eyewitness | (N) Nothing
@@ -148,9 +159,5 @@ Use this tool only on domains you own or have permission to test. Unauthorized u
 
 Contributions are welcome via issues or pull requests.
 
-## Issues/Imporvements actively being worked on
 
-- The script is currently not handling wildcard entries. This is being worked on and will be updated soon.
-- Need to add a check in the install script to run as sudo
-- Need to add an option to specify an output directory and a check to see if its overwritting previous files
 

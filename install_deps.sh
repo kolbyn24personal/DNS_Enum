@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 set -e
 
-echo "[+] Installing dependencies (Kali Linux environment assumed). Requires sudo."
+# Sudo check
+if [[ $EUID -ne 0 ]]; then
+   echo "[ERROR] This script must be run as root (sudo). Please run again with sudo."
+   exit 1
+fi
 
 # Update package lists
 sudo apt update
 
 # Install required packages
 # This includes amass, jq, firefox-esr, git, python3-venv, golang, massdns, seclists, eyewitness
-sudo apt install -y amass jq firefox-esr git python3-venv golang massdns seclists eyewitness
+sudo apt install -y amass jq firefox-esr git python3-venv golang massdns seclists eyewitness golang
+
+# Install shuffledns
+go install -v github.com/projectdiscovery/shuffledns/cmd/shuffledns@latest
+cp ~/go/bin/shuffledns /usr/local/bin/
 
 # Set up GOPATH if not already set
 if [ -z "$GOPATH" ]; then
